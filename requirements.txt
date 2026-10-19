@@ -1,0 +1,11 @@
+crewai[google-genai]
+fastapi
+joblib
+numpy
+pandas
+python-dotenv
+requests
+scikit-learn
+streamlit
+uvicorn[standard]
+xgboost
