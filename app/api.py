@@ -1,15 +1,13 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from .analysis import analyze_network
 from .config import KNOWLEDGE_RELEVANCE_THRESHOLD
 from .database import get_all_history, initialize_database
 from .knowledge import answer_with_llm, build_knowledge_query, retrieve_knowledge
-from .modeling import initialize_model
+from .modeling import evaluate_model, initialize_model, predict_fault
 from .schemas import KnowledgeSearchRequest, NetworkMetrics
 
 
@@ -39,26 +37,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_FILE = Path(r"C:\Users\sp217\Downloads\Telecom Network Console (2).html")
-
-
-@app.get("/", include_in_schema=False)
-def serve_frontend():
-    if FRONTEND_FILE.exists():
-        return FileResponse(FRONTEND_FILE)
-    raise HTTPException(status_code=404, detail="Frontend file not found.")
-
-
-@app.get("/console", include_in_schema=False)
-def serve_frontend_console():
-    if FRONTEND_FILE.exists():
-        return FileResponse(FRONTEND_FILE)
-    raise HTTPException(status_code=404, detail="Frontend file not found.")
-
-
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.post("/predict")
+def predict(metrics: NetworkMetrics):
+    try:
+        prediction = predict_fault(metrics.model_dump())
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    return {"cell_id": metrics.cell_id, "prediction": prediction}
+
+
+@app.get("/model/evaluation")
+def model_evaluation():
+    try:
+        return evaluate_model()
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.post("/analyze")
@@ -132,3 +131,9 @@ def search_knowledge(request: KnowledgeSearchRequest):
 def history():
     history_df = get_all_history()
     return {"count": len(history_df), "items": history_df.to_dict(orient="records")}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)
